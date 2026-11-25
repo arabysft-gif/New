@@ -1,0 +1,41 @@
+name: render
+on:
+  workflow_dispatch: {}
+jobs:
+  chunk:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node render-chunk.mjs --shard ${{ matrix.shard }} --total 20 --out chunk-${{ matrix.shard }}.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chunk-${{ matrix.shard }}
+          path: chunk-${{ matrix.shard }}.mp4
+          retention-days: 1
+  merge:
+    needs: chunk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: chunk-*
+          merge-multiple: false
+          path: chunks
+      - run: |
+          for i in $(seq 0 19); do echo "file '$GITHUB_WORKSPACE/chunks/chunk-$i/chunk-$i.mp4'" >> list.txt; done
+          ffmpeg -f concat -safe 0 -i list.txt -c copy final.mp4
+          ffprobe -v error -show_entries format=duration -of csv=p=0 final.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final
+          path: final.mp4
+          retention-days: 3
